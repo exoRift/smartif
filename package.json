@@ -1,0 +1,11 @@
+{
+  "name": "smartif",
+  "main": "dist/index.js",
+  "type": "module",
+  "devDependencies": {
+    "@types/bun": "latest"
+  },
+  "peerDependencies": {
+    "typescript": "^5"
+  }
+}
