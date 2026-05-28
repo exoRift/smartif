@@ -257,24 +257,40 @@ test('async then clauses', async () => {
   expect(await secondRet, 'promise returns proper value').toBe(456)
 })
 
-// test('async lazy condition clauses', async () => {
-//   function sleep (ms: number): Promise<void> {
-//     return new Promise((resolve) => setTimeout(resolve, ms))
-//   }
+test('async condition clauses', async () => {
+  function sleep (ms: number): Promise<void> {
+    return new Promise((resolve) => setTimeout(resolve, ms))
+  }
 
-//   const ret = smart
-//     .if(true, () => 123)
-//     .else.if.lazy(async () => await sleep(10), () => 456)
-//     .unwrap()
+  const shortedRet = smart
+    .if(true, () => 123)
+    .else.if.async(async () => await sleep(10), () => 456)
+    .unwrap()
 
-//   expect(ret, 'returned value is promise').toBeInstanceOf(Promise)
-//   expect(await ret, 'promise returns proper value').toBe(123)
+  expect(shortedRet, 'returned value is promise').toBeInstanceOf(Promise)
+  expect(await shortedRet, 'promise returns proper value').toBe(123)
 
-//   const secondRet = smart
-//     .if(false, async () => 123)
-//     .else(async () => await sleep(50).then(() => 456))
-//     .unwrap()
+  const evaledRet = smart
+    .if(false, () => 123)
+    .else.if.async(async () => true, () => 456)
+    .unwrap()
 
-//   expect(secondRet, 'returned value is promise').toBeInstanceOf(Promise)
-//   expect(await secondRet, 'promise returns proper value').toBe(456)
-// })
+  expect(evaledRet, 'returned value is promise').toBeInstanceOf(Promise)
+  expect(await evaledRet, 'promise returns proper value').toBe(456)
+
+  const prom = smart
+    .if(false, () => 123)
+    .else.if.async(async () => { throw new Error('condition should fail') }, () => 456)
+    .else(() => 789)
+  await prom.unwrap()
+
+  const erroredRet = smart
+    .if(false, () => 123)
+    .else.if.async(async () => { throw new Error('condition should fail') }, () => 456)
+    .else(() => 789)
+    .unwrap()
+
+  expect(erroredRet, 'returned value is promise').toBeInstanceOf(Promise)
+  expect(() => erroredRet, 'promise doesn\'t throw').not.toThrow()
+  expect(await erroredRet, 'promise returns proper value').toBe(789)
+})
