@@ -1,6 +1,6 @@
 import { expect, test, spyOn } from 'bun:test'
 
-import smart, { type Proceed } from '..'
+import smart, { type Next, type Proceed } from '..'
 
 test('base if statement no unwrap', () => {
   const callbacks = {
@@ -92,7 +92,7 @@ test('else statement', () => {
 
 test('next statement', () => {
   const callbacks = {
-    firstCallback: (v: any, proceed: Proceed<any>) => { return proceed.next() },
+    firstCallback: (v: any, proceed: Proceed) => { return proceed.next() },
     secondCallback: () => {}
   }
   const firstSpy = spyOn(callbacks, 'firstCallback')
@@ -117,7 +117,7 @@ test('next statement', () => {
 
 test('forfeit statement', () => {
   const callbacks = {
-    firstCallback: (v: any, proceed: Proceed<any>) => { return proceed.forfeit('foo') },
+    firstCallback: (v: any, proceed: Proceed) => { return proceed.forfeit('foo') },
     secondCallback: () => {},
     thirdCallback: () => {}
   }
@@ -155,7 +155,7 @@ test('value unwrapping', () => {
 
   expect(
     smart
-      .if(0, (v) => v)
+      .if(0, (v): number | boolean => v)
       .else.if(false, (v) => v)
       .else(() => 789)
       .unwrap(),
@@ -164,7 +164,7 @@ test('value unwrapping', () => {
 
   expect(
     smart
-      .if(123, (v, proceed) => proceed.next())
+      .if(123, (v, proceed): Next | number => proceed.next())
       .else.if(456, (v) => v)
       .else(() => 789)
       .unwrap(),
@@ -173,18 +173,108 @@ test('value unwrapping', () => {
 
   expect(
     smart
-      .if(123, (v, proceed) => proceed.forfeit(789))
+      .if(false, () => 5) // Needed to infer return type number without explicitly setting forfeiture type so that is also implied
+      .else.if(123, (v, proceed) => proceed.forfeit(789))
       .else.if(456, (v) => v)
-      .else((v) => v)
+      .else((v) => v ?? 890)
       .unwrap(),
     'else statement from forfeit'
   ).toBe(789)
 })
 
-test.todo('preservation', () => {
+test('preservation', () => {
+  type Union = {
+    type: 'number'
+    field: number
+  } | {
+    type: 'string'
+    field: string
+  }
 
+  const foo: Union = {
+    type: 'number',
+    field: 123
+  }
+
+  const ret = smart
+    .if.preserve(() => foo, (v) => v.field)
+    .unwrap()
+
+  expect(ret, 'Proper value returned').toBe(123)
+
+  const callbacks = {
+    failure: () => {}
+  }
+  const spy = spyOn(callbacks, 'failure')
+
+  smart.if.preserve((fail) => fail, callbacks.failure)
+
+  expect(spy, 'failure does not invoke callback').not.toBeCalled()
 })
 
-test.todo('lazy if', () => {
+test('lazy if', () => {
+  const shortedConditions = {
+    shorted: () => 123
+  }
+  const shortedSpy = spyOn(shortedConditions, 'shorted')
 
+  smart
+    .if(true, () => {})
+    .else.if.lazy(shortedConditions.shorted, () => {})
+
+  expect(shortedSpy, 'shorted lazy eval not evaled').not.toHaveBeenCalled()
+
+  const evaledConditions = {
+    evaled: () => 123
+  }
+  const evaledSpy = spyOn(evaledConditions, 'evaled')
+
+  smart
+    .if(false, () => {})
+    .else.if.lazy(evaledConditions.evaled, () => {})
+
+  expect(evaledSpy, 'shorted lazy eval not evaled').toHaveBeenCalledTimes(1)
 })
+
+test('async then clauses', async () => {
+  function sleep (ms: number): Promise<void> {
+    return new Promise((resolve) => setTimeout(resolve, ms))
+  }
+
+  const ret = smart
+    .if(true, () => sleep(50).then(() => 123))
+    .unwrap()
+
+  expect(ret, 'returned value is promise').toBeInstanceOf(Promise)
+  expect(await ret, 'promise returns proper value').toBe(123)
+
+  const secondRet = smart
+    .if(false, async () => 123)
+    .else(async () => await sleep(50).then(() => 456))
+    .unwrap()
+
+  expect(secondRet, 'returned value is promise').toBeInstanceOf(Promise)
+  expect(await secondRet, 'promise returns proper value').toBe(456)
+})
+
+// test('async lazy condition clauses', async () => {
+//   function sleep (ms: number): Promise<void> {
+//     return new Promise((resolve) => setTimeout(resolve, ms))
+//   }
+
+//   const ret = smart
+//     .if(true, () => 123)
+//     .else.if.lazy(async () => await sleep(10), () => 456)
+//     .unwrap()
+
+//   expect(ret, 'returned value is promise').toBeInstanceOf(Promise)
+//   expect(await ret, 'promise returns proper value').toBe(123)
+
+//   const secondRet = smart
+//     .if(false, async () => 123)
+//     .else(async () => await sleep(50).then(() => 456))
+//     .unwrap()
+
+//   expect(secondRet, 'returned value is promise').toBeInstanceOf(Promise)
+//   expect(await secondRet, 'promise returns proper value').toBe(456)
+// })

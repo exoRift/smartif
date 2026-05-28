@@ -20,6 +20,6 @@
     "tsd": "^0.33.0"
   },
   "peerDependencies": {
-    "typescript": "^5"
+    "typescript": "^6.0.3"
   }
 }
