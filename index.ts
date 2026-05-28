@@ -3,7 +3,9 @@ interface Else<Return, LastNext> {
   if: Block<Return, LastNext>['if']
 }
 
-class Next<T> {
+class Next {}
+
+class Forfeit<T> {
   value: T
 
   constructor (value: T) {
@@ -11,71 +13,101 @@ class Next<T> {
   }
 }
 
-class Block<Return, LastNext> {
-  protected readonly steps: Array<[any, (value: any, next: typeof this.next) => any]>
-  protected fallback?: (value: LastNext | undefined) => Return
-  protected fulfilled: boolean
-  protected runIndex: number
-  protected lastValue: Return | LastNext | undefined
+interface Proceed<T> {
+  next: () => Next
+  forfeit: (value: T) => Forfeit<T>
+}
 
-  else: Else<Return, LastNext>
+// TODO: if.lazy
+class Block<Return, Forfeiture> {
+  protected readonly steps: Array<[any, (value: any, proceed: Proceed<any>) => any]>
+  protected fallback?: (value: Forfeiture | undefined) => Return
+
+  protected runIndex: number
+  protected fulfilled: boolean
+  protected forfeited: boolean
+
+  protected returnValue: Return | undefined
+  protected forfeitValue: Forfeiture | undefined
+
+  protected proceed: Proceed<any>
+
+  else: Else<Return, Forfeiture>
 
   // The types of condition and value must match but this is a private class so we don't care about constraining the constructor
-  constructor (condition: any, then: (value: any, next: typeof this.next) => Return | Next<any>) {
+  constructor (condition: any, then: (value: any, proceed: Proceed<any>) => Return | Next | Forfeit<any>) {
+    this.proceed = {
+      next: this.next,
+      forfeit: this.forfeit
+    }
+
     this.steps = [[condition, then]]
-    this.fulfilled = false
+
     this.runIndex = 0
+    this.fulfilled = false
+    this.forfeited = false
 
     this.else = function (then) {
       this.fallback = then
       this.evaluate()
       return this as any
-    } as Else<Return, LastNext>
-    this.else.if = this.if as Else<Return, LastNext>['if']
+    } as Else<Return, Forfeiture>
+    this.else = this.else.bind(this) as Else<Return, Forfeiture>
+    this.else.if = this.if.bind(this) as Else<Return, Forfeiture>['if']
+
+    this.evaluate()
   }
 
-  protected if<T, R extends Return | Next<any>> (condition: T, then: (value: T | LastNext, next: typeof this.next) => R): Next<any> extends R ? Block<Return | Exclude<R, Next<any>>, LastNext | (R extends Next<infer NewNext> ? NewNext : never)> : Block<Return | R, LastNext> {
+  protected if<T, F, R extends Return | Next | Forfeit<F>> (condition: T, then: (value: T, proceed: Proceed<F>) => R): Block<Return | R, Forfeiture | F> {
     this.steps.push([condition, then])
     this.evaluate()
     return this as any
   }
 
-  protected next<V> (value: V) {
-    return new Next(value)
+  protected next () {
+    return new Next()
+  }
+
+  protected forfeit<F> (value: F) {
+    return new Forfeit(value)
   }
 
   protected evaluate () {
-    while (!this.fulfilled && this.runIndex < this.steps.length) {
+    while (!this.fulfilled && !this.forfeited && this.runIndex < this.steps.length) {
       const step = this.steps[this.runIndex]!
       const condition = step[0]
 
       if (condition) {
-        const value = step[1](condition, this.next)
+        const value = step[1](condition, this.proceed)
 
-        if (value instanceof Next) this.lastValue = value.value
-        else {
-          this.lastValue = value
-          this.fulfilled = true
+        if (!(value instanceof Next)) {
+          if (value instanceof Forfeit) {
+            this.forfeitValue = value.value
+            this.forfeited = true
+          } else {
+            this.returnValue = value
+            this.fulfilled = true
+          }
         }
-
-        ++this.runIndex
       }
+
+      ++this.runIndex
     }
 
-    if (this.fallback !== undefined) {
-      this.lastValue = this.fallback(this.lastValue as LastNext | undefined)
+    if (!this.fulfilled && this.fallback !== undefined) {
+      this.returnValue = this.fallback(this.forfeitValue)
       this.fulfilled = true
     }
   }
 
   unwrap (): Return {
-    if (this.fulfilled) return this.lastValue as Return
+    if (this.fulfilled) return this.returnValue!
     else return undefined as Return
   }
 }
 
 const smart = {
-  if<T, Return> (condition: T, then: (value: T, next: Block<any, any>['next']) => Return): Next<any> extends Return ? Block<(Return extends Next<any> ? never : Return) | undefined, (Return extends Next<infer NewNext> ? NewNext : never)> : Block<Return | undefined, never> {
+  if<T, F, Return> (condition: T, then: (value: T, proceed: Block<any, any>['proceed']) => Return | Next | Forfeit<F>): Block<Return, F> {
     const block = new Block(condition, then)
 
     return block as any
