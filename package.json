@@ -1,6 +1,7 @@
 {
   "name": "smartif",
   "main": "dist/index.js",
+  "types": "dist/index.d.ts",
   "type": "module",
   "scripts": {
     "build": "[ -d dist ] && rm -r dist; bun build --target=node --format=esm --packages external src/index.ts --outfile dist/index.js && tsc --project tsconfig.build.json",

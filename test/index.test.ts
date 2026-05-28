@@ -1,6 +1,6 @@
 import { expect, test, spyOn } from 'bun:test'
 
-import smart, { type Next, type Proceed } from '..'
+import smart, { type Proceed } from '../src'
 
 test('base if statement no unwrap', () => {
   const callbacks = {
@@ -113,6 +113,16 @@ test('next statement', () => {
 
   expect(firstSpy, 'first condition ran').toHaveBeenCalledTimes(1)
   expect(secondSpy, 'second condition ran').toHaveBeenCalledTimes(1)
+
+  firstSpy.mockClear()
+  secondSpy.mockClear()
+
+  smart
+    .if(true, callbacks.firstCallback)
+    .else(callbacks.secondCallback)
+
+  expect(firstSpy, 'first condition ran').toHaveBeenCalledTimes(1)
+  expect(secondSpy, 'else ran').toHaveBeenCalledTimes(1)
 })
 
 test('forfeit statement', () => {
@@ -155,7 +165,7 @@ test('value unwrapping', () => {
 
   expect(
     smart
-      .if(0, (v): number | boolean => v)
+      .if(0, (v) => v)
       .else.if(false, (v) => v)
       .else(() => 789)
       .unwrap(),
@@ -164,7 +174,7 @@ test('value unwrapping', () => {
 
   expect(
     smart
-      .if(123, (v, proceed): Next | number => proceed.next())
+      .if(123, (v, proceed) => proceed.next())
       .else.if(456, (v) => v)
       .else(() => 789)
       .unwrap(),

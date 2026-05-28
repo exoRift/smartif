@@ -1,4 +1,4 @@
-type GetReturn<T> = Exclude<T, Next | Forfeit<any>>
+type GetReturn<T> = Exclude<T, Next | Forfeit<any>> | (Next extends T ? void : never)
 type GetForfeiture<T> = T extends Forfeit<infer F> ? F : never
 
 interface Else<Return, Forfeiture, HasAsync extends boolean> {
@@ -7,7 +7,7 @@ interface Else<Return, Forfeiture, HasAsync extends boolean> {
    * @param then The "then" clause
    * @returns    The logical block (with only .unwrap() available)
    */
-  <R extends Return>(this: Block<Return, Forfeiture, HasAsync>, then: (value: Forfeiture | undefined) => R): Omit<Block<Return | R, Forfeiture, HasAsync>, 'else'>
+  <NewReturn, R extends NewReturn | Return>(this: Block<Return, Forfeiture, HasAsync>, then: (value: Forfeiture | undefined) => R): Omit<Block<Exclude<Return, void> | R, Forfeiture, HasAsync>, 'else'>
   /**
    * Perform an "else if" operation
    * @param
@@ -22,14 +22,14 @@ interface If<Return, Forfeiture, HasAsync extends boolean> {
    * @param then      The "then" clause
    * @returns         The logical block
    */
-  <T, F, R extends void | Return | Next | Forfeit<F>>(condition: T, then: (value: T, proceed: Proceed) => R): Block<Return | GetReturn<R>, Forfeiture | GetForfeiture<R>, HasAsync>
+  <T, F, NewReturn, R extends void | NewReturn | Return | Next | Forfeit<F>>(condition: T, then: (value: T, proceed: Proceed) => R): Block<Return | GetReturn<R>, Forfeiture | GetForfeiture<R>, HasAsync>
   /**
    * Perform an "if" statement lazily (the condition will only be evaluated if all previous conditions failed)
    * @param condition A callback containing the condition to evaluate
    * @param then      The "then" clause
    * @returns         The logical block
    */
-  lazy: <T, F, R extends void | Return | Next | Forfeit<F>>(condition: () => T, then: (value: T, proceed: Proceed) => R) => Block<Return | GetReturn<R>, Forfeiture | GetForfeiture<R>, HasAsync>
+  lazy: <T, F, NewReturn, R extends void | NewReturn | Return | Next | Forfeit<F>>(condition: () => T, then: (value: T, proceed: Proceed) => R) => Block<Return | GetReturn<R>, Forfeiture | GetForfeiture<R>, HasAsync>
   /**
    * Perform an "if" statement with preservation (and laziness). This allows you to take advantage of TypeScript's implicit type narrowing\
    * to ensure that the value passed to the "then" clause is sufficiently narrowed.\
@@ -39,7 +39,7 @@ interface If<Return, Forfeiture, HasAsync extends boolean> {
    * @param then      The "then" clause
    * @returns         The logical block
    */
-  preserve: <T, F, R extends void | Return | Next | Forfeit<F>>(condition: (fail: Failure) => T | Failure, then: (value: T, proceed: Proceed) => R) => Block<Return | GetReturn<R>, Forfeiture | GetForfeiture<R>, HasAsync>
+  preserve: <T, F, NewReturn, R extends void | NewReturn | Return | Next | Forfeit<F>>(condition: (fail: Failure) => T | Failure, then: (value: T, proceed: Proceed) => R) => Block<Return | GetReturn<R>, Forfeiture | GetForfeiture<R>, HasAsync>
 
   /**
    * Perform an "if" statement on an async function (lazily). Will check if the final resolved value is truthy.\
@@ -267,7 +267,7 @@ class Block<Return, Forfeiture, HasAsync extends boolean> {
  */
 function baseIfRegular<T, F, Return, R extends void | Return | Next | Forfeit<F>> (condition: T, then: (value: T, proceed: Proceed) => R): Block<GetReturn<R>, GetForfeiture<R>, false> {
   const block = new Block<GetReturn<R>, GetForfeiture<R>, false>()
-  block.if(condition, then as any)
+  block.if(condition, then)
   return block
 }
 /**
