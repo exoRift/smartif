@@ -4,7 +4,7 @@ interface Else<Return, Forfeiture> {
    * @param then The "then" clause
    * @returns    The logical block (with only .unwrap() available)
    */
-  (this: Block<Return, Forfeiture>, then: (value: Forfeiture | undefined) => Return): Omit<Block<Exclude<Return, undefined>, Forfeiture>, 'else'>
+  <R extends Return>(this: Block<Return, Forfeiture>, then: (value: Forfeiture | undefined) => void | R): Omit<Block<Return | R, Forfeiture>, 'else'>
   /**
    * Perform an "else if" operation
    * @param
@@ -32,7 +32,7 @@ class Forfeit<T> {
   }
 }
 
-interface Proceed<T> {
+export interface Proceed<T> {
   /**
    * Return me in a condition clause to skip to the next "else if" clause
    * @returns The operation
@@ -43,7 +43,7 @@ interface Proceed<T> {
    * @param value The value to pass to the else "then" clause
    * @returns     The operation
    */
-  forfeit: (value: T) => Forfeit<T>
+  forfeit: (value?: T) => Forfeit<T>
 }
 
 // TODO: if.lazy
@@ -52,13 +52,13 @@ interface Proceed<T> {
  */
 class Block<Return, Forfeiture> {
   protected readonly steps: Array<[any, (value: any, proceed: Proceed<any>) => any]>
-  protected fallback?: (value: Forfeiture | undefined) => Return
+  protected fallback?: (value: Forfeiture | undefined) => void | Return
 
   protected runIndex: number
   protected fulfilled: boolean
   protected forfeited: boolean
 
-  protected returnValue: Return | undefined
+  protected returnValue: Return | undefined | void
   protected forfeitValue: Forfeiture | undefined
 
   protected proceed: Proceed<any>
@@ -71,7 +71,7 @@ class Block<Return, Forfeiture> {
    * @param condition The first condition
    * @param then      The first "then" clause
    */
-  constructor (condition: any, then: (value: any, proceed: Proceed<any>) => Return | Next | Forfeit<any>) {
+  constructor (condition: any, then: (value: any, proceed: Proceed<any>) => void | Return | Next | Forfeit<any>) {
     this.proceed = {
       next: this.next.bind(this),
       forfeit: this.forfeit.bind(this)
@@ -83,12 +83,11 @@ class Block<Return, Forfeiture> {
     this.fulfilled = false
     this.forfeited = false
 
-    this.else = function (elsethen) {
+    this.else = function (this: Block<Return, Forfeiture>, elsethen: Parameters<Else<Return, Forfeiture>>[0]) {
       this.fallback = elsethen
       this.evaluate()
-      return this as any
-    } as Else<Return, Forfeiture>
-    this.else = this.else.bind(this) as Else<Return, Forfeiture>
+      return this
+    }.bind(this) as unknown as Else<Return, Forfeiture>
     this.else.if = this.if.bind(this)
 
     this.evaluate()
@@ -100,7 +99,7 @@ class Block<Return, Forfeiture> {
    * @param then      The "then" clause
    * @returns         The logical block
    */
-  protected if<T, F, R extends Return | Next | Forfeit<F>> (condition: T, then: (value: T, proceed: Proceed<F>) => R): Block<Return | R, Forfeiture | F> {
+  protected if<T, F, R extends Return | Next | Forfeit<F>> (condition: T, then: (value: T, proceed: Proceed<F>) => void | R): Block<Return | R, Forfeiture | F> {
     this.steps.push([condition, then])
     this.evaluate()
     return this as any
@@ -165,7 +164,7 @@ class Block<Return, Forfeiture> {
 }
 
 const smart = {
-  if<T, F, Return> (condition: T, then: (value: T, proceed: Block<any, any>['proceed']) => Return | Next | Forfeit<F>): Block<Return, F> {
+  if<T, F, Return> (condition: T, then: (value: T, proceed: Block<any, any>['proceed']) => void | Return | Next | Forfeit<F>): Block<Return, F> {
     const block = new Block(condition, then)
 
     return block as any
@@ -173,3 +172,4 @@ const smart = {
 }
 
 export default smart
+export type { Forfeit, Next }
