@@ -2,8 +2,22 @@
   "name": "smartif",
   "main": "dist/index.js",
   "type": "module",
+  "scripts": {
+    "build": "[ -d dist ] && rm -r dist; bun build --target=node --format=esm --packages external src/index.ts --outfile dist/index.js && tsc --project tsconfig.build.json",
+    "lint": "eslint .",
+    "pretest:types": "bun run build && find test -name '*.test-d.ts' -exec perl -pi -e 's|// \\@ts-expect-error|// ts-expect-error|g' {} +",
+    "test:types": "tsd --files 'test/**/*.test-d.ts'",
+    "posttest:types": "find test -name '*.test-d.ts' -exec perl -pi -e 's|// ts-expect-error|// \\@ts-expect-error|g' {} +",
+    "test": "bun run test:types && bun test",
+    "prepack": "bun run build"
+  },
   "devDependencies": {
-    "@types/bun": "latest"
+    "@types/bun": "latest",
+    "custom-types": "github:exoRift/custom-types",
+    "eslint": "9",
+    "eslint-config": "github:exoRift/eslint-config",
+    "eslint-plugin-jsdoc": "^63.0.0",
+    "tsd": "^0.33.0"
   },
   "peerDependencies": {
     "typescript": "^5"

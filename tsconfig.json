@@ -2,12 +2,12 @@
   "compilerOptions": {
     // Environment setup & latest features
     "lib": ["ESNext"],
+    "types": ["bun", "custom-types"],
     "target": "ESNext",
-    "module": "Preserve",
+    "module": "ESNext",
     "moduleDetection": "force",
     "jsx": "react-jsx",
     "allowJs": true,
-    "types": ["bun"],
 
     // Bundler mode
     "moduleResolution": "bundler",
@@ -18,13 +18,16 @@
     // Best practices
     "strict": true,
     "skipLibCheck": true,
-    "noFallthroughCasesInSwitch": true,
     "noUncheckedIndexedAccess": true,
-    "noImplicitOverride": true,
 
     // Some stricter flags (disabled by default)
     "noUnusedLocals": false,
     "noUnusedParameters": false,
     "noPropertyAccessFromIndexSignature": false
-  }
+  },
+  "include": [
+    "**/*.ts*",
+    "**/*.*js"
+  ],
+  "exclude": ["node_modules/", "dist/"]
 }
