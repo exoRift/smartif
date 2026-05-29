@@ -10,12 +10,19 @@ test('if let type', () => {
 })
 
 test('if, elseif, else return type', () => {
-  const ret = smart
+  const elseRet = smart
     .if(true, () => 123)
     .else.if(true, () => 'foo')
     .else(() => false)
 
-  expectType<number | string | boolean>(ret.unwrap())
+  expectType<number | string | boolean>(elseRet.unwrap())
+
+  const noElseRet = smart
+    .if(true, () => 123)
+    .else.if(true, () => 'foo')
+    .else.if(true, () => false)
+
+  expectType<number | string | boolean | undefined>(noElseRet.unwrap())
 })
 
 test('lazy if let type', () => {
@@ -58,7 +65,7 @@ test('preserve -> excluded if let type', () => {
 
   smart
     .if.preserve((fail) => foo.type === 'string' ? foo : fail, (v) => expectType<string>(v.field))
-    .else.exclude(foo, (v) => expectType<number | undefined>(v?.field))
+    .else.exclude(foo, (v) => expectType<number>(v.field))
 })
 
 test('async if let type', () => {
@@ -94,9 +101,16 @@ test('next type is ignored', () => {
 })
 
 test('async return type', () => {
-  const ret = smart
+  const noElseRet = smart
     .if.async(async () => Promise.resolve(true), () => 'foo')
     .unwrap()
 
-  expectType<Promise<string>>(ret)
+  expectType<Promise<string | undefined>>(noElseRet)
+
+  const elseRet = smart
+    .if.async(async () => Promise.resolve(true), () => 'foo')
+    .else(() => 'bar')
+    .unwrap()
+
+  expectType<Promise<string>>(elseRet)
 })

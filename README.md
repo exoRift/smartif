@@ -1,63 +1,234 @@
 # Smart If
 #### A smarter way to compose if-else blocks in TypeScript, leveraging convenient patterns and sugars from other languages like Rust and Zig
 
-## if (let ...) - Rust
+## Installation
+`npm i smartif`
+
+## if (let ...) - (comparable to Rust)
+The concept of `if ... let` allows you to define a variable localized to the "then" scope of an if statement, assuming the condition holds
+
+### Traditional approach
+
+```ts
+// Expensive operation called multiple times or called unnecessarily
+if (configPath) {
+  const config = loadConfigFile(configPath) // Expensive I/O operation
+
+  if (config && config.database?.url) {
+    initializeDatabase(config.database.url) // Have to check config again
+  } else if (config && process.env.DATABASE_URL) {
+    // Redundant: already checked config above
+    initializeDatabase(process.env.DATABASE_URL)
+  } else {
+    initializeDatabase(DEFAULT_DB_URL)
+  }
+} else if (process.env.DATABASE_URL) {
+  // Code duplication: Same initialization logic repeated
+  initializeDatabase(process.env.DATABASE_URL)
+} else {
+  initializeDatabase(DEFAULT_DB_URL)
+}
+```
+
+```ts
+// Variables leak into outer scope (polluting namespace)
+let config: Config | undefined
+let dbUrl: string | undefined
+
+if (configPath) {
+  config = loadConfigFile(configPath) // Now pollutes the outer scope
+}
+
+if (config && config.database?.url) {
+  dbUrl = config.database.url
+  initializeDatabase(dbUrl)
+} else if (process.env.DATABASE_URL) {
+  dbUrl = process.env.DATABASE_URL
+  initializeDatabase(dbUrl)
+}
+// config and dbUrl are now in scope everywhere below, even where they're not needed
+```
+
+### With smartif
+
 ```ts
 import smart from 'smartif'
 
-// Assume that `users.lookup()` is an expensive operation
-// If we want to see if a user is authorized, we have to checked if they've provided an email, then look up the user,
-// and finally get their admin status. If the user hasn't provided an email, we don't want to bother with lookups
-
-// ################### EXAMPLE 1 ###################
-if (email && (users.lookup(email)?.getIsGlobalAdmin() || users.lookup(email)?.getGroup(group))) {
-  // We don't have access to the user object or the group in this scope
-  // We can't define variables above because we don't know if email is supplied and we don't want to run lookup unnecessarily
-}
-// #################################################
-
-// ################### EXAMPLE 2 ###################
-if (email) {
-  const user = users.lookup(email)
-  const settings = getSettings()
-
-  if (user.getIsGlobalAdmin()) {
-    // We now have the user object, but the code is messy and managing the control group can be difficult, especially as complexity scales
-  } else if (user?.getGroup(group).admin) {
-    // Once again, we don't have the group here, but don't want to get it above because we only need if if the user is not a global admin
-  }
-} else if (authorizedGuest) {
-  // We don't have access to settings and need to call the function again (duplicate code).
-  // Moving the call above the statements is out of the question because it's only needed if either of these conditions are satisfied
-}
-// #################################################
-
-// ################ SMARTIF EXAMPLE ################
-// This example is a bit contrived and possibly more complicated than those above, but its purpose is to to showcase the API
 smart
-  .if(email && users.lookup(email), (user) => {
-    // user is defined
+  // No wasted operations: loadConfigFile() only called if configPath is truthy
+  .if(configPath && loadConfigFile(configPath), (config) => {
+    // Scoped variables: config only exists within this branch
     smart
-      .if(user?.getIsGlobalAdmin(), () => { /* ... */ })
-      .else.if(user?.getGroup(group), (group) => {
-        if (group.admin) {
-          /* ... */
-        }
+      .if(config.database?.url, (dbUrl) => {
+        // Clearer intent: condition and extracted value are visually connected
+        initializeDatabase(dbUrl)
+      })
+      // No code duplication: initializeDatabase() logic not repeated
+      .else.if(process.env.DATABASE_URL, (dbUrl) => {
+        initializeDatabase(dbUrl)
+      })
+      .else(() => {
+        initializeDatabase(DEFAULT_DB_URL)
       })
   })
-  .else.if(authorizedGuest, () => { /* ... */ })
-  .else(() => { /* ... */ })
-// #################################################
+  .else.if(process.env.DATABASE_URL, (dbUrl) => {
+    initializeDatabase(dbUrl)
+  })
+  .else(() => {
+    initializeDatabase(DEFAULT_DB_URL)
+  })
+
+// config and dbUrl don't pollute the outer scope
 ```
 
-## if expressions - Zig
+## if expressions (comparable to Zig)
+`if expressions` allow an if statement to evaluate to a value that can be used, similar to a ternary, except it provides a scope for temporary variable definition and cleanup
+
+```ts
+import smart from 'smartif'
+
+const ret = smart
+  .if(cond1, () => { return 123 })
+  .else(() => { return '456' })
+  .unwrap()
+
+ret
+// ^?: number | string
+```
 
 ## chain skipping
+Chain skipping allows you to abort your logic within a "then" clause and instead move on to the next condition as if this condition were falsy
+
+```ts
+import smart from 'smartif'
+
+smart
+  .if(user.hasNotificationsOn(), (_, proceed) => {
+    const settings = user.getChannelSettings(channel)
+
+    if (settings.muted) return proceed.next() // move onto the `else if` statement (will run if notification.isImportant())
+
+    /* ... */
+  })
+  .else.if(notification.isImportant(), () => { /* ... */ })
+  .else(() => { /* ... */ })
+```
 
 ## forfeiting
+Forfeiting allows you to give up on an entire chain and skip straight to the `else` statement, optionally supplying a value if desired
+
+### Traditional approach
+
+```ts
+import smart from 'smartif'
+
+// Requires a callback to be defined that remains in scope
+const defaultBehavior = () => {
+  // ...
+}
+
+if (user.hasNotificationsOn()) {
+  const settings = user.getChannelSettings(channel)
+
+  if (settings.muted) defaultBehavior()
+  else {
+    // ...
+  }
+} else if (notification.isImportant()) {
+  // ...
+} else defaultBehavior()
+```
+
+### With smartif
+
+```ts
+import smart from 'smartif'
+
+smart
+  .if(user.hasNotificationsOn(), (_, proceed) => {
+    const settings = user.getChannelSettings(channel)
+
+    if (settings.muted) return proceed.forfeit('muted') // move onto the else statement (and provide it with 'muted') (skip the other if)
+
+    /* ... */
+  })
+  .else.if(notification.isImportant(), () => { /* ... */ })
+  .else((v) => {
+    v
+    // ^?: 'muted' | undefined
+  })
+```
 
 ## lazy evaluation
+Lazy evaluation only checks a condition when it's required, thus if your else-if block has a lot of expensive operations you don't want to unnecessarily execute, you can use `if.lazy()`
+
+> [!NOTE]
+> Since the first if statement is always evaluated, lazy evaluation doesn't provide any benefit which is why it's not available on the first `if`
+
+```ts
+import smart from 'smartif'
+
+smart
+  .if(expensiveOperation(), () => { /* ... */ })
+  .else.if.lazy(() => otherExpensiveOperation(), () => { /* ... */ })
+```
 
 ## preserving evaluation
+An important feature of TypeScript is type narrowing, which is lost upon entering a callback scope. To facilitate this, you can call `if.preserve`. (lazily evaluated)
+
+```ts
+import smart from 'smartif'
+
+type DataPoint = {
+  type: 'number'
+  field: number
+} | {
+  type: 'string'
+  field: string
+}
+
+declare const point: DataPoint
+
+smart
+  .if.preserve((fail) => point.type === 'number' ? point : fail, (v) => {
+    v
+    // ^?: { type: 'number', field: number }
+  })
+```
+
+After a preserving `if`, you can call `else.exclude` to handle the else case, where the passed value type will be the provided variable type, excluding the preserved type. (This forces the if else block to terminate)
+
+```ts
+smart
+  .if.preserve((fail) => point.type === 'number' ? point : fail, (v) => {
+    v
+    // ^?: { type: 'number', field: number }
+  })
+  .else.exclude(point, (v) => {
+    v
+    // ^?: { type: 'string', field: string }
+  })
+```
 
 ## async evaluation
+Calling `if.async` allows an async condition callback to be supplied (lazily evaluated) which will pass upon an awaited truthy value. Errors are caught and treated as falsy. Calling `if.async` will cause `.unwrap()` to always return a promise.
+
+```ts
+import smart from 'smartif'
+
+async function getUser (id): Promise<User | null> {
+  // ...
+}
+
+const ret = smart
+  .if.async(() => getUser(id), (u) => {
+    u
+    // ^?: User
+
+    return u.name
+  })
+  .unwrap()
+
+ret
+// ^?: User | undefined
+```
