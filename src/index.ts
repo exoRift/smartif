@@ -324,4 +324,4 @@ const smart = {
 }
 
 export default smart
-export type { Forfeit, Next }
+export type { Forfeit, Next, Failure }

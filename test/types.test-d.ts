@@ -87,7 +87,7 @@ test('next type is ignored', () => {
     })
     .unwrap()
 
-  expectType<123 | void>(noElseRet)
+  expectType<123 | undefined>(noElseRet)
 
   const elseRet = smart
     .if(Math.random() > 0.5, (_, proceed) => {
