@@ -33,14 +33,32 @@ test('preserve if let type', () => {
     field: string
   }
 
-  const foo: Union = {
+  const foo = {
     type: 'number',
     field: 123
-  }
+  } as Union
 
   smart
-    // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition
     .if.preserve((fail) => foo.type === 'number' ? foo : fail, (v) => expectType<number>(v.field))
+})
+
+test('preserve -> excluded if let type', () => {
+  type Union = {
+    type: 'number'
+    field: number
+  } | {
+    type: 'string'
+    field: string
+  }
+
+  const foo = {
+    type: 'number',
+    field: 123
+  } as Union
+
+  smart
+    .if.preserve((fail) => foo.type === 'string' ? foo : fail, (v) => expectType<string>(v.field))
+    .else.exclude(foo, (v) => expectType<number | undefined>(v?.field))
 })
 
 test('async if let type', () => {

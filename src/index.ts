@@ -7,12 +7,17 @@ interface Else<Return, Forfeiture, HasAsync extends boolean> {
    * @param then The "then" clause
    * @returns    The logical block (with only .unwrap() available)
    */
-  <NewReturn, R extends NewReturn | Return>(this: Block<Return, Forfeiture, HasAsync>, then: (value: Forfeiture | undefined) => R): Omit<Block<Exclude<Return, void> | R, Forfeiture, HasAsync>, 'else'>
+  <NewReturn, R extends NewReturn | Return>(then: (value: Forfeiture | undefined) => R): Omit<Block<Exclude<Return, void> | R, Forfeiture, HasAsync>, 'else'>
+
   /**
    * Perform an "else if" operation
    * @param
    */
   if: If<Return, Forfeiture, HasAsync>
+}
+
+interface ElseExclude<Return, Forfeiture, HasAsync extends boolean, Preserved> {
+  exclude: <T, NewReturn, R extends NewReturn | Return>(excluded: T, then: (value: Exclude<T, Preserved> | Forfeiture | undefined) => R) => Omit<Block<Exclude<Return, void> | R, Forfeiture, HasAsync>, 'else' | 'if'>
 }
 
 interface If<Return, Forfeiture, HasAsync extends boolean> {
@@ -39,7 +44,7 @@ interface If<Return, Forfeiture, HasAsync extends boolean> {
    * @param then      The "then" clause
    * @returns         The logical block
    */
-  preserve: <T, F, NewReturn, R extends void | NewReturn | Return | Next | Forfeit<F>>(condition: (fail: Failure) => T | Failure, then: (value: T, proceed: Proceed) => R) => Block<Return | GetReturn<R>, Forfeiture | GetForfeiture<R>, HasAsync>
+  preserve: <T, F, NewReturn, R extends void | NewReturn | Return | Next | Forfeit<F>>(condition: (fail: Failure) => T | Failure, then: (value: T, proceed: Proceed) => R) => Block<Return | GetReturn<R>, Forfeiture | GetForfeiture<R>, HasAsync, T>
 
   /**
    * Perform an "if" statement on an async function (lazily). Will check if the final resolved value is truthy.\
@@ -100,12 +105,12 @@ type ConditionType = 'regular' | 'lazy' | 'preserve' | 'async'
 /**
  * A smart if condition block (chain of conditions)
  */
-class Block<Return, Forfeiture, HasAsync extends boolean> {
+class Block<Return, Forfeiture, HasAsync extends boolean, Preserved = unknown> {
   static NEXT = new Next()
   static FAILURE = new Failure()
 
   protected readonly steps: Array<[type: ConditionType, any, (value: any, proceed: Proceed) => any]>
-  protected fallback?: (value: Forfeiture | undefined) => void | Return
+  protected fallback?: (value: any) => any
 
   protected runIndex: number
   protected fulfilled: boolean
@@ -114,12 +119,12 @@ class Block<Return, Forfeiture, HasAsync extends boolean> {
   protected evaluationPromise: undefined | Promise<void>
 
   protected returnValue: Return | undefined | void
-  protected forfeitValue: Forfeiture | undefined
+  protected forfeitValue: Forfeiture | undefined | void
 
   protected proceed: Proceed
 
   if: If<Return, Forfeiture, HasAsync>
-  else: Else<Return, Forfeiture, HasAsync>
+  else: unknown extends Preserved ? Else<Return, Forfeiture, HasAsync> : Else<Return, Forfeiture, HasAsync> & ElseExclude<Return, Forfeiture, HasAsync, Preserved>
 
   /**
    * Construct a condition block
@@ -141,8 +146,9 @@ class Block<Return, Forfeiture, HasAsync extends boolean> {
     this.if.preserve = this.insertCondition.bind(this, 'preserve') as If<Return, Forfeiture, HasAsync>['preserve']
     this.if.async = this.insertCondition.bind(this, 'async') as If<Return, Forfeiture, HasAsync>['async']
 
-    this.else = this.setFallback.bind(this) as Else<Return, Forfeiture, HasAsync>
+    this.else = this.setFallback.bind(this) as typeof this.else
     this.else.if = this.if
+    ;(this.else as any).exclude = this.setExcludingFallback.bind(this)
   }
 
   /**
@@ -152,10 +158,23 @@ class Block<Return, Forfeiture, HasAsync extends boolean> {
    * @param then      The "then" clause
    * @returns         The logical block
    */
-  protected insertCondition<T, F, R extends void | Return | Next | Forfeit<F>> (type: ConditionType, condition: T, then: (value: T, proceed: Proceed) => R): Block<Return | GetReturn<R>, Forfeiture | GetForfeiture<R>, HasAsync> {
+  protected insertCondition<T, F, NewReturn, R extends void | NewReturn | Return | Next | Forfeit<F>> (type: ConditionType, condition: T, then: (value: T, proceed: Proceed) => R): Block<Return | GetReturn<R>, Forfeiture | GetForfeiture<R>, HasAsync> {
     if (type === 'async') this.evaluationPromise ??= Promise.resolve()
 
     this.steps.push([type, condition, then])
+    this.evaluate()
+    return this as any
+  }
+
+  /**
+   * Set a fallback that excludes certain values (can be invoked after .preserve). Sets forfeit value if not already set
+   * @param excluded The excluded value to supply to the callback
+   * @param then     The "then" clause
+   * @returns        The logical block
+   */
+  protected setExcludingFallback<T, NewReturn, R extends NewReturn | Return> (excluded: T, then: (value: Exclude<T, Preserved> | Forfeiture | undefined) => R): Omit<Block<Exclude<Return, void> | R, Forfeiture, HasAsync>, 'else'> {
+    this.forfeitValue ??= excluded as any
+    this.fallback = then
     this.evaluate()
     return this as any
   }
@@ -165,10 +184,10 @@ class Block<Return, Forfeiture, HasAsync extends boolean> {
    * @param then The behavior
    * @returns    The logical block
    */
-  protected setFallback<R extends Return> (then: (value: Forfeiture | undefined) => R): Omit<Block<Return | R, Forfeiture, HasAsync>, 'else'> {
+  protected setFallback<NewReturn, R extends NewReturn | Return> (then: (value: Forfeiture | undefined) => R): Omit<Block<Exclude<Return, void> | R, Forfeiture, HasAsync>, 'else'> {
     this.fallback = then
     this.evaluate()
-    return this
+    return this as any
   }
 
   /**
@@ -279,8 +298,8 @@ function baseIfRegular<T, F, Return, R extends void | Return | Next | Forfeit<F>
  * @param then      The "then" clause of the if statement
  * @returns         The condition block to chain operators on
  */
-baseIfRegular.preserve = function baseIfPreserve<T, F, Return, R extends void | Return | Next | Forfeit<F>> (condition: (fail: Failure) => T | Failure, then: (value: Exclude<T, Failure>, proceed: Proceed) => R): Block<GetReturn<R>, GetForfeiture<R>, false> {
-  const block = new Block<GetReturn<R>, GetForfeiture<R>, false>()
+baseIfRegular.preserve = function baseIfPreserve<T, F, Return, R extends void | Return | Next | Forfeit<F>> (condition: (fail: Failure) => T | Failure, then: (value: Exclude<T, Failure>, proceed: Proceed) => R): Block<GetReturn<R>, GetForfeiture<R>, false, T> {
+  const block = new Block<GetReturn<R>, GetForfeiture<R>, false, T>()
   block.if.preserve(condition, then as any)
   return block
 }

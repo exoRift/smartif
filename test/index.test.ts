@@ -222,6 +222,32 @@ test('preservation', () => {
   expect(spy, 'failure does not invoke callback').not.toBeCalled()
 })
 
+test('preservation exclusion', () => {
+  const callbacks = {
+    callback: () => {}
+  }
+  const spy = spyOn(callbacks, 'callback')
+
+  type Union = {
+    type: 'number'
+    field: number
+  } | {
+    type: 'string'
+    field: string
+  }
+
+  const foo = {
+    type: 'number',
+    field: 123
+  } as Union
+
+  smart
+    .if.preserve((fail) => foo.type === 'string' ? foo : fail, (v) => v.field)
+    .else.exclude(foo, callbacks.callback)
+
+  expect(spy, 'spy called with value').toBeCalledWith(foo)
+})
+
 test('lazy if', () => {
   const shortedConditions = {
     shorted: () => 123
