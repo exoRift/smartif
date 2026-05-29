@@ -19,7 +19,7 @@
   "version": "1.0.0",
   "repository": {
     "type": "git",
-        "url": "git+https://github.com/exoRift/smartif.git"
+    "url": "git+https://github.com/exoRift/smartif.git"
   },
   "license": "MIT",
   "main": "dist/index.js",
