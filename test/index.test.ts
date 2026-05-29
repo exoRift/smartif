@@ -288,12 +288,6 @@ test('async condition clauses', async () => {
   expect(evaledRet, 'returned value is promise').toBeInstanceOf(Promise)
   expect(await evaledRet, 'promise returns proper value').toBe(456)
 
-  const prom = smart
-    .if(false, () => 123)
-    .else.if.async(async () => { throw new Error('condition should fail') }, () => 456)
-    .else(() => 789)
-  await prom.unwrap()
-
   const erroredRet = smart
     .if(false, () => 123)
     .else.if.async(async () => { throw new Error('condition should fail') }, () => 456)
@@ -303,4 +297,9 @@ test('async condition clauses', async () => {
   expect(erroredRet, 'returned value is promise').toBeInstanceOf(Promise)
   expect(() => erroredRet, 'promise doesn\'t throw').not.toThrow()
   expect(await erroredRet, 'promise returns proper value').toBe(789)
+
+  const entry = smart
+    .if.async(async () => true, () => 123)
+
+  expect(await entry.unwrap(), 'async entry function works').toBe(123)
 })
